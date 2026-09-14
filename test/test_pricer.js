@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict';
 import { MODELS_DATA, getModelById, filterModels } from '../models-data.js';
 import {
+  CURRENCY_RATES,
   estimateTextTokens,
   estimateSchemaTokens,
   estimateMediaTokens,
@@ -89,7 +90,7 @@ console.log(`  ✓ Verified fresh vs cached rates, cache savings, and volume sca
 // 4. Currency Conversion
 console.log('\n▶ Test 4: Currency Conversion (USD to EUR)');
 const eurCost = calculateModelCost(claude37, breakdown, { isCached: false, scale: 1, currency: 'EUR' });
-assert.ok(Math.abs(eurCost.totalCost - (0.45 * 0.92)) < 0.005, `Expected EUR cost ~${0.45 * 0.92}, got ${eurCost.totalCost}`);
+assert.ok(Math.abs(eurCost.totalCost - (0.45 * CURRENCY_RATES.EUR.rate)) < 0.005, `Expected EUR cost ~${0.45 * CURRENCY_RATES.EUR.rate}, got ${eurCost.totalCost}`);
 assert.equal(formatCurrency(12.50, 'EUR'), '€12.50');
 assert.equal(formatCurrency(12.50, 'USD'), '$12.50');
 console.log(`  ✓ Verified multi-currency exchange rate conversions and formatting.`);

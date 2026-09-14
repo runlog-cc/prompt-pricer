@@ -50,9 +50,9 @@ export function analyzePromptBloat({
       id: 'stack-trace-bloat',
       severity: BLOAT_SEVERITY.CRITICAL,
       title: 'Uncompacted Stack Trace / Raw Error Dump Detected',
-      message: 'Raw framework stack traces contain redundant internal frames. Pre-filtering internal node_modules/site-packages frames before passing to LLMs routinely saves 65-80% of trace tokens.',
+      message: 'Raw framework stack traces can contain redundant internal frames. Measure the compacted prompt against the original before relying on any token reduction.',
       wastedTokens: wasted,
-      recommendation: 'Use RunLog Ship-Check trace sanitizer or strip third-party call frames.'
+      recommendation: 'Remove irrelevant third-party call frames and compare the estimated token counts before and after.'
     });
   }
 
@@ -69,9 +69,9 @@ export function analyzePromptBloat({
       id: 'oversized-system-prompt',
       severity: BLOAT_SEVERITY.WARNING,
       title: 'Heavy System Instruction Payload (>3,500 Tokens)',
-      message: `System instructions consume ${systemTokens.toLocaleString()} tokens per run. In continuous agent loops, monolithic system prompts dominate 70%+ of inference expenditure unless cached.`,
+      message: `System instructions consume ${systemTokens.toLocaleString()} estimated tokens per run. Compare a smaller prompt or retrieved instructions with the current prompt in a measured benchmark before changing production behavior.`,
       wastedTokens: excessSystem,
-      recommendation: 'Leverage prompt caching (90% discount on Anthropic / 50% on OpenAI) or split domain guidelines into dynamic RAG chunks.'
+      recommendation: 'Check the selected provider pricing and caching terms, then measure a smaller or retrieved-instruction variant before adoption.'
     });
   }
 
@@ -138,7 +138,7 @@ export function analyzePromptBloat({
       title: 'Extended Thinking Token Budget >16,000 Tokens',
       message: `Thinking budget is configured for ${thinkingTokens.toLocaleString()} tokens. On Claude 3.7 Sonnet or OpenAI o1, reasoning tokens are billed at full output price ($15-$60/1M tokens).`,
       wastedTokens: wastedThinking,
-      recommendation: 'Cap reasoning budget between 2,048 - 8,192 tokens unless solving unconstrained mathematical theorems.'
+      recommendation: 'Try a lower reasoning budget in a measured comparison and retain it only if the required output still passes your checks.'
     });
   }
 
@@ -213,7 +213,7 @@ export function estimatePromptComplexity(text = '') {
       predictedThinking: 8000,
       predictedOutput: 3500,
       cues: cues.slice(0, 3),
-      note: 'High algorithmic/code complexity. Frontier reasoning models will burn 4k–16k thinking tokens.'
+      note: 'High algorithmic/code complexity. Treat the suggested reasoning range as an estimate and validate it with measured runs.'
     };
   } else if (score >= 20) {
     return {

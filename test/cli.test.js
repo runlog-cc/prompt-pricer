@@ -15,3 +15,12 @@ test('unsupported session telemetry and invalid options fail instead of inventin
     assert.notEqual(run(...args).status, 0, args.join(' '));
   }
 });
+test('JSON export includes provenance and distinguishes last turn from session total',()=>{
+ const r=run('price','--json','--models','gpt-4o-mini','--turns','3','--output-tokens','20','--thinking-tokens','0','hello');
+ assert.equal(r.status,0,r.stderr);const data=JSON.parse(r.stdout);assert.equal(data.schema,'runlog.price-estimate.v1');assert.equal(data.assumptions.turns,3);assert.equal(data.assumptions.output_tokens_per_turn,20);assert.ok(data.results[0].cumulative_cost>data.results[0].last_turn_cost);assert.ok(data.results[0].pricing.source);assert.ok(data.fx.source);assert.equal(data.measured,false);
+});
+
+test('explicit reasoning token override is charged even without capability metadata',()=>{
+ const r=run('price','--json','--currency','USD','--models','gpt-4o','--output-tokens','0','--thinking-tokens','10000','hi');
+ assert.equal(r.status,0,r.stderr);assert.ok(JSON.parse(r.stdout).results[0].cumulative_cost>0.01);
+});

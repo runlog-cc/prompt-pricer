@@ -1,5 +1,6 @@
-// RunLog Prompt Pricer - 100+ Model Catalog & Pricing Matrix
-// Updated: 2026-09
+import {PRICE_SNAPSHOT} from './pricing-snapshot.js';
+// RunLog Prompt Pricer - reference metadata plus a versioned provider price snapshot
+// Unmatched legacy rows retain unknown-date reference rates; never label them current.
 // Prices in USD per 1,000,000 tokens (or per unit/minute/image for generative media)
 
 export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/models';
@@ -685,11 +686,22 @@ export const MODELS_DATA = [
 ];
 
 // Active registry initialized with curated base models
-export let ACTIVE_MODELS = [...MODELS_DATA];
+export const MODEL_ALIASES = Object.freeze({
+  'gpt-4o':'openai/gpt-4o','gpt-4o-mini':'openai/gpt-4o-mini','openai-o1':'openai/o1','openai-o1-mini':'openai/o1-mini',
+  'gpt-4-5-preview':'openai/gpt-4.5-preview','claude-3-7-sonnet':'anthropic/claude-3.7-sonnet',
+  'claude-3-5-sonnet':'anthropic/claude-3.5-sonnet','claude-3-opus':'anthropic/claude-3-opus','claude-3-5-haiku':'anthropic/claude-3.5-haiku',
+  'gemini-2-0-flash':'google/gemini-2.0-flash-001','gemini-2-0-flash-lite':'google/gemini-2.0-flash-lite-001',
+  'gemini-1-5-pro':'google/gemini-pro-1.5','gemini-1-5-flash':'google/gemini-flash-1.5',
+  'deepseek-r1-official':'deepseek/deepseek-r1','deepseek-v3':'deepseek/deepseek-chat','qwen-2-5-coder-32b':'qwen/qwen-2.5-coder-32b-instruct',
+  'mistral-large-2411':'mistralai/mistral-large-2411','codestral-2501':'mistralai/codestral-2501',
+  'cohere-command-r-plus':'cohere/command-r-plus','cohere-command-r':'cohere/command-r'
+});
+export let ACTIVE_MODELS = [];
+export const PRICE_PROVENANCE = {schema:PRICE_SNAPSHOT.schema,source:PRICE_SNAPSHOT.source,observed_at:PRICE_SNAPSHOT.observed_at};
 
 // Helper to retrieve a model by ID
 export function getModelById(id) {
-  return ACTIVE_MODELS.find(m => m.id === id) || MODELS_DATA.find(m => m.id === id);
+  return ACTIVE_MODELS.find(m => m.id === id || m.canonicalId === id);
 }
 
 // Helper to filter models by search, cohort, and provider
@@ -719,8 +731,8 @@ export async function syncLiveOpenRouterPrices() {
       if (cached) {
         try {
           const { timestamp, data } = JSON.parse(cached);
-          if (Date.now() - timestamp < CACHE_TTL_MS && Array.isArray(data) && data.length > 0) {
-            mergeOpenRouterModels(data);
+          if (Number.isSafeInteger(timestamp) && timestamp <= Date.now() && Date.now() - timestamp < CACHE_TTL_MS && Array.isArray(data) && data.length > 0) {
+            mergeOpenRouterModels(data,new Date(timestamp).toISOString());
             return { success: true, count: ACTIVE_MODELS.length, fromCache: true };
           }
         } catch (e) {
@@ -751,92 +763,23 @@ export async function syncLiveOpenRouterPrices() {
   }
 }
 
-function mergeOpenRouterModels(openRouterList) {
-  const modelMap = new Map();
-  
-  // Start with built-in models
-  for (const m of MODELS_DATA) {
-    modelMap.set(m.id, { ...m });
+export function mergeOpenRouterModels(openRouterList, observedAt = new Date().toISOString(), live = true) {
+  const modelMap=new Map(MODELS_DATA.map(m=>[m.id,{...m,canonicalId:MODEL_ALIASES[m.id] || m.id,pricingProvenance:{source:'legacy-reference',observed_at:null},isLiveSynced:false}]));
+  const numeric = value => (typeof value === 'number' || (typeof value === 'string' && value.trim() !== '')) && Number.isFinite(Number(value)) && Number(value)>=0;
+  for(const item of openRouterList) {
+    if(typeof item.id!=='string' || !numeric(item.pricing?.prompt) || !numeric(item.pricing?.completion)) continue;
+    const supportsReasoning=numeric(item.pricing.internal_reasoning) || (item.supported_parameters || []).some(p=>p==='reasoning'||p==='include_reasoning');
+    const existing=[...modelMap.values()].find(m=>m.canonicalId===item.id);
+    const pricing={inputPricePerM:Number(item.pricing.prompt)*1e6,outputPricePerM:Number(item.pricing.completion)*1e6,
+      thinkingPricePerM:numeric(item.pricing.internal_reasoning)?Number(item.pricing.internal_reasoning)*1e6:undefined,
+      cachedInputPricePerM:numeric(item.pricing.input_cache_read)?Number(item.pricing.input_cache_read)*1e6:undefined,
+      pricingProvenance:{source:OPENROUTER_API_URL,observed_at:observedAt},isLiveSynced:live};
+    if(existing){Object.assign(existing,pricing);existing.supportsThinking ||= supportsReasoning;if(item.context_length)existing.contextWindow=item.context_length;continue;}
+    modelMap.set(item.id,{id:item.id,canonicalId:item.id,name:item.name||item.id,provider:({openai:PROVIDERS.OPENAI,anthropic:PROVIDERS.ANTHROPIC,google:PROVIDERS.GOOGLE,deepseek:PROVIDERS.DEEPSEEK,'meta-llama':PROVIDERS.META,mistralai:PROVIDERS.MISTRAL,'x-ai':PROVIDERS.XAI,cohere:PROVIDERS.COHERE})[item.id.split('/')[0]] || item.id.split('/')[0],cohort:COHORTS.WORKHORSE,
+      ...pricing,contextWindow:item.context_length||null,maxOutput:item.top_provider?.max_completion_tokens||null,
+      supportsThinking:supportsReasoning,supportsVision:item.architecture?.input_modalities?.includes('image')||false,
+      supportsAudio:item.architecture?.input_modalities?.includes('audio')||false,latencyMs:null,description:'Provider catalog price; token forecasts are heuristic.'});
   }
-
-  // Update with live pricing from OpenRouter
-  for (const orModel of openRouterList) {
-    const promptPricePerM = parseFloat(orModel.pricing?.prompt || '0') * 1_000_000;
-    const completionPricePerM = parseFloat(orModel.pricing?.completion || '0') * 1_000_000;
-    const reasoningPricePerM = orModel.pricing?.internal_reasoning
-      ? parseFloat(orModel.pricing.internal_reasoning) * 1_000_000
-      : undefined;
-    const cachedInputPerM = orModel.pricing?.input_cache_read
-      ? parseFloat(orModel.pricing.input_cache_read) * 1_000_000
-      : undefined;
-
-    // Determine Provider Name
-    let provider = 'OpenRouter';
-    const orId = orModel.id.toLowerCase();
-    if (orId.startsWith('anthropic/')) provider = PROVIDERS.ANTHROPIC;
-    else if (orId.startsWith('openai/')) provider = PROVIDERS.OPENAI;
-    else if (orId.startsWith('google/')) provider = PROVIDERS.GOOGLE;
-    else if (orId.startsWith('deepseek/')) provider = PROVIDERS.DEEPSEEK;
-    else if (orId.startsWith('meta-llama/') || orId.startsWith('meta/')) provider = PROVIDERS.META;
-    else if (orId.startsWith('mistralai/') || orId.startsWith('mistral/')) provider = PROVIDERS.MISTRAL;
-    else if (orId.startsWith('x-ai/')) provider = PROVIDERS.XAI;
-    else if (orId.startsWith('cohere/')) provider = PROVIDERS.COHERE;
-    else if (orId.startsWith('fal/')) provider = PROVIDERS.FAL;
-
-    // Determine Cohort
-    let cohort = COHORTS.WORKHORSE;
-    if (
-      orId.includes('opus') || 
-      orId.includes('sonnet') || 
-      orId.includes('o1') || 
-      orId.includes('o3') || 
-      orId.includes('gpt-4') || 
-      orId.includes('pro') ||
-      orId.includes('grok-3') ||
-      orId.includes('r1')
-    ) {
-      cohort = COHORTS.FRONTIER;
-    } else if (orModel.architecture?.modality?.includes('image') || orModel.architecture?.modality?.includes('audio')) {
-      cohort = COHORTS.MEDIA;
-    }
-
-    // Match existing base model if present
-    const cleanId = orModel.id.replace('/', '-');
-    const existing = Array.from(modelMap.values()).find(
-      m => m.id === cleanId || m.id === orModel.id || orModel.name.toLowerCase().includes(m.name.toLowerCase())
-    );
-
-    if (existing) {
-      // Update with live real-time rate from OpenRouter
-      existing.inputPricePerM = promptPricePerM;
-      existing.outputPricePerM = completionPricePerM;
-      if (reasoningPricePerM !== undefined) existing.thinkingPricePerM = reasoningPricePerM;
-      if (cachedInputPerM !== undefined) existing.cachedInputPricePerM = cachedInputPerM;
-      if (orModel.context_length) existing.contextWindow = orModel.context_length;
-      existing.isLiveSynced = true;
-    } else if (promptPricePerM > 0 || completionPricePerM > 0) {
-      // Add newly released models automatically
-      modelMap.set(orModel.id, {
-        id: orModel.id,
-        name: orModel.name,
-        provider,
-        cohort,
-        inputPricePerM: promptPricePerM,
-        outputPricePerM: completionPricePerM,
-        thinkingPricePerM: reasoningPricePerM || completionPricePerM,
-        cachedInputPricePerM: cachedInputPerM,
-        contextWindow: orModel.context_length || 128000,
-        maxOutput: orModel.top_provider?.max_completion_tokens || 8192,
-        supportsThinking: reasoningPricePerM !== undefined || orId.includes('r1') || orId.includes('o1') || orId.includes('o3'),
-        supportsVision: orModel.architecture?.input_modalities?.includes('image') || false,
-        supportsAudio: orModel.architecture?.input_modalities?.includes('audio') || false,
-        latencyMs: 400,
-        description: orModel.description || 'Live model synced from OpenRouter registry.',
-        isLiveSynced: true
-      });
-    }
-  }
-
-  ACTIVE_MODELS = Array.from(modelMap.values());
+  ACTIVE_MODELS=[...modelMap.values()];return ACTIVE_MODELS;
 }
-
+mergeOpenRouterModels(PRICE_SNAPSHOT.models,PRICE_SNAPSHOT.observed_at,false);

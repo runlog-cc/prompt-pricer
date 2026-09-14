@@ -1,15 +1,16 @@
 // RunLog Prompt Pricer - Pricing & Token Calculation Engine
-// High-precision client-side estimation tuned for BPE, tiktoken & Claude/Gemini tokenizers
+// Heuristic estimates, not metered tokens; provider-specific framing/media may differ.
 
+export const FX_PROVENANCE = {source:'https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/eurofxref-graph-usd.en.html',observed_at:'2026-09-09',usd_to_eur:0.8582};
 export const CURRENCY_RATES = {
   USD: { symbol: '$', rate: 1.0 },
-  EUR: { symbol: '€', rate: 0.92 }
+  EUR: { symbol: '€', rate: 0.8582 }
 };
 
 /**
  * Fast client-side token estimator.
  * Tuned for English prose, code, markdown, and JSON structures.
- * Typically within 2-4% of tiktoken / cl100k_base / o200k_base.
+ * No calibrated accuracy guarantee. Use provider usage for settlement.
  */
 export function estimateTextTokens(text = '') {
   if (!text || typeof text !== 'string') return 0;
@@ -137,10 +138,17 @@ export function calculateModelCost(model, breakdown, {
   currency = 'USD',
   scale = 1 // 1 = per call, 1000 = 1k daily runs, 100000 = 100k monthly runs
 } = {}) {
+  breakdown={thinkingTokens:0,...breakdown};
+  const finite = (v,label) => {if(typeof v!=='number'||!Number.isFinite(v)||v<0)throw new Error(`Invalid ${label}: expected finite nonnegative number`);};
+  finite(scale,'scale');
+  for(const key of ['totalInputTokens','expectedOutputTokens','thinkingTokens'])finite(breakdown[key],key);
+  for(const key of ['inputPricePerM','outputPricePerM','cachedInputPricePerM','thinkingPricePerM','costPerUnit'])if(model[key]!==undefined)finite(model[key],key);
+  if(model.costPerUnit===undefined && (model.inputPricePerM===undefined || model.outputPricePerM===undefined))throw new Error('Unknown model pricing');
+  if(!CURRENCY_RATES[currency])throw new Error('Unsupported currency');
   const rate = CURRENCY_RATES[currency]?.rate || 1.0;
 
   // Media / Generative non-token models (fal.ai, Midjourney, ElevenLabs, Runway)
-  if (model.cohort === 'media' && model.costPerUnit) {
+  if (model.cohort === 'media' && model.costPerUnit !== undefined) {
     let unitCostUSD = model.costPerUnit;
 
     // Scale unit cost by volume
@@ -168,7 +176,7 @@ export function calculateModelCost(model, breakdown, {
 
   const freshInputRatePerM = model.inputPricePerM;
   const outputRatePerM = model.outputPricePerM;
-  const thinkingRatePerM = model.thinkingPricePerM || model.outputPricePerM;
+  const thinkingRatePerM = model.thinkingPricePerM ?? model.outputPricePerM;
 
   // Cost for a single run
   const freshInputCostUSD = (breakdown.totalInputTokens / 1_000_000) * freshInputRatePerM;
@@ -180,7 +188,7 @@ export function calculateModelCost(model, breakdown, {
 
   const singleCallCostUSD = activeInputCostUSD + outputCostUSD + thinkingCostUSD;
   const singleCallFreshUSD = freshInputCostUSD + outputCostUSD + thinkingCostUSD;
-  const singleCallCachedUSD = ((breakdown.totalInputTokens / 1_000_000) * (model.cachedInputPricePerM || freshInputRatePerM)) + outputCostUSD + thinkingCostUSD;
+  const singleCallCachedUSD = ((breakdown.totalInputTokens / 1_000_000) * (model.cachedInputPricePerM ?? freshInputRatePerM)) + outputCostUSD + thinkingCostUSD;
 
   const totalCostUSD = singleCallCostUSD * scale;
   const savingsFromCacheUSD = Math.max(0, (singleCallFreshUSD - singleCallCachedUSD) * scale);
@@ -242,16 +250,23 @@ export function calculateMultiTurnConversationCost(model, {
   currency = 'USD',
   isCached = false
 }) {
-  const rate = CURRENCY_RATES[currency]?.rate || 1.0;
+  for (const [key,value] of Object.entries({systemPromptTokens,userTokensPerTurn,outputTokensPerTurn,thinkingTokensPerTurn})) {
+    if (!Number.isFinite(value) || value < 0) throw new Error(`Invalid ${key}`);
+  }
+  if (!Number.isSafeInteger(turns) || turns < 1) throw new Error('Invalid turns');
+  if (!CURRENCY_RATES[currency]) throw new Error('Unsupported currency');
+  const rate = CURRENCY_RATES[currency].rate;
   if (!model || model.cohort === 'media') {
     return null;
   }
+
+  calculateModelCost(model,{totalInputTokens:systemPromptTokens+userTokensPerTurn,expectedOutputTokens:outputTokensPerTurn,thinkingTokens:thinkingTokensPerTurn},{currency,isCached});
 
   const inputRatePerM = isCached && model.cachedInputPricePerM !== undefined
     ? model.cachedInputPricePerM
     : model.inputPricePerM;
   const outputRatePerM = model.outputPricePerM;
-  const thinkingRatePerM = model.thinkingPricePerM || model.outputPricePerM;
+  const thinkingRatePerM = model.thinkingPricePerM ?? model.outputPricePerM;
 
   // Turn 1 Cost (Fresh Chat baseline)
   const freshInputTokens = systemPromptTokens + userTokensPerTurn;

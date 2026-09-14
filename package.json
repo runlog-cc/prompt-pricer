@@ -1,11 +1,25 @@
 {
   "name": "@runlog/prompt-pricer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Offline heuristic prompt token and cost estimates",
   "type": "module",
-  "bin": { "runlog": "bin/runlog-pricer.js", "runlog-pricer": "bin/runlog-pricer.js" },
-  "files": ["bin/", "engine.js", "analyzer.js", "models-data.js", "README.md"],
-  "scripts": { "test": "node test/test_pricer.js && node --test test/cli.test.js" },
-  "engines": { "node": ">=20" },
+  "bin": {
+    "runlog": "bin/runlog-pricer.js",
+    "runlog-pricer": "bin/runlog-pricer.js"
+  },
+  "files": [
+    "bin/",
+    "engine.js",
+    "analyzer.js",
+    "models-data.js",
+    "README.md",
+    "pricing-snapshot.js"
+  ],
+  "scripts": {
+    "test": "node test/test_pricer.js && node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "license": "MIT"
 }
