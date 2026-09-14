@@ -10,7 +10,7 @@ export const BLOAT_SEVERITY = {
 };
 
 /**
- * Analyzes prompt inputs for anti-patterns, bloat, and costly token waste.
+ * Flags prompt patterns for qualitative review; no measured waste inference.
  */
 export function analyzePromptBloat({
   systemPrompt = '',
@@ -21,7 +21,7 @@ export function analyzePromptBloat({
   expectedOutputTokens = 500
 }) {
   const issues = [];
-  let estimatedWastedTokens = 0;
+
 
   const combinedText = `${systemPrompt}\n${userPrompt}`;
 
@@ -42,16 +42,14 @@ export function analyzePromptBloat({
   }
 
   if (hasStackTrace) {
-    const traceTokens = estimateTextTokens(combinedText.match(/[a-zA-Z0-9_\-./]+:\d+:\d+/g)?.join(' ') || '') * 3;
-    const wasted = Math.max(350, Math.round(traceTokens * 0.75));
-    estimatedWastedTokens += wasted;
+
 
     issues.push({
       id: 'stack-trace-bloat',
       severity: BLOAT_SEVERITY.CRITICAL,
       title: 'Uncompacted Stack Trace / Raw Error Dump Detected',
       message: 'Raw framework stack traces can contain redundant internal frames. Measure the compacted prompt against the original before relying on any token reduction.',
-      wastedTokens: wasted,
+      wastedTokens: null,
       recommendation: 'Remove irrelevant third-party call frames and compare the estimated token counts before and after.'
     });
   }
@@ -62,15 +60,14 @@ export function analyzePromptBloat({
   const totalInputTokens = systemTokens + userTokens;
 
   if (systemTokens > 3500) {
-    const excessSystem = Math.round((systemTokens - 2000) * 0.4);
-    estimatedWastedTokens += excessSystem;
+
 
     issues.push({
       id: 'oversized-system-prompt',
       severity: BLOAT_SEVERITY.WARNING,
       title: 'Heavy System Instruction Payload (>3,500 Tokens)',
       message: `System instructions consume ${systemTokens.toLocaleString()} estimated tokens per run. Compare a smaller prompt or retrieved instructions with the current prompt in a measured benchmark before changing production behavior.`,
-      wastedTokens: excessSystem,
+      wastedTokens: null,
       recommendation: 'Check the selected provider pricing and caching terms, then measure a smaller or retrieved-instruction variant before adoption.'
     });
   }
@@ -94,15 +91,14 @@ export function analyzePromptBloat({
   }
 
   if (repetitiveCount >= 5) {
-    const wasted = repetitiveCount * 12;
-    estimatedWastedTokens += wasted;
+
 
     issues.push({
       id: 'repetitive-directives',
       severity: BLOAT_SEVERITY.INFO,
       title: `${repetitiveCount} Repetitive Conversational Directives Found`,
-      message: 'Fluff phrases like "make sure to" or "you must always" trigger defensive token overhead without improving model compliance on frontier models (Claude 3.7 / GPT-4o).',
-      wastedTokens: wasted,
+      message: 'Repeated directive phrases were detected. Review whether each repetition is needed and compare any edited prompt with representative tasks.',
+      wastedTokens: null,
       recommendation: 'Use crisp imperative rules (e.g., "- Format: Strict JSON" instead of "- You must always format your answer as JSON").'
     });
   }
@@ -113,31 +109,29 @@ export function analyzePromptBloat({
     // Check for excessive whitespace or raw formatting
     const rawWhitespaceRatio = (jsonSchema.match(/\s{4,}/g) || []).length / Math.max(1, jsonSchema.split('\n').length);
     if (rawWhitespaceRatio > 0.4 && schemaTokens > 400) {
-      const wasted = Math.round(schemaTokens * 0.25);
-      estimatedWastedTokens += wasted;
+
 
       issues.push({
         id: 'unminified-json-schema',
         severity: BLOAT_SEVERITY.WARNING,
         title: 'Unminified Schema & Excessive Indentation',
-        message: 'JSON schemas sent with multi-level indentations waste white-space tokens without adding semantic guidance.',
-        wastedTokens: wasted,
-        recommendation: 'Minify schemas or strip verbose descriptions on self-explanatory keys.'
+        message: 'Indented schema formatting was detected. Token effects depend on the tokenizer; compare a compact variant before adopting it.',
+        wastedTokens: null,
+        recommendation: 'Measure a compact schema variant and verify that required guidance is preserved.'
       });
     }
   }
 
   // 5. EXTENDED THINKING RUNAWAY RISK
   if (thinkingTokens > 16000) {
-    const wastedThinking = Math.round(thinkingTokens * 0.35);
-    estimatedWastedTokens += wastedThinking;
+
 
     issues.push({
       id: 'thinking-runaway-risk',
       severity: BLOAT_SEVERITY.WARNING,
       title: 'Extended Thinking Token Budget >16,000 Tokens',
-      message: `Thinking budget is configured for ${thinkingTokens.toLocaleString()} tokens. On Claude 3.7 Sonnet or OpenAI o1, reasoning tokens are billed at full output price ($15-$60/1M tokens).`,
-      wastedTokens: wastedThinking,
+      message: `Thinking budget is configured for ${thinkingTokens.toLocaleString()} tokens. Actual usage and billing depend on the model and provider; this threshold does not measure waste.`,
+      wastedTokens: null,
       recommendation: 'Try a lower reasoning budget in a measured comparison and retain it only if the required output still passes your checks.'
     });
   }
@@ -154,17 +148,16 @@ export function analyzePromptBloat({
 
   return {
     score: bloatScore,
-    status: bloatScore > 50 ? 'Severe Bloat' : bloatScore > 20 ? 'Moderate Inefficiencies' : 'Well Compacted',
+    status: issues.length ? 'Review suggested' : 'No heuristic flags',
     issues,
-    estimatedWastedTokens,
-    potentialMonthlySavingsUSD: Math.round((estimatedWastedTokens * 100000 / 1_000_000) * 15.0) // 100k calls at $15/1M (Claude 3.7 / GPT-4o output rate)
+    estimatedWastedTokens: null,
+    potentialMonthlySavingsUSD: null
   };
 }
 
 /**
- * Automatically predicts the cognitive complexity of a prompt.
- * Determines how many thinking tokens and output tokens a frontier reasoning
- * model (Claude 3.7, o1, o3-mini, DeepSeek R1) will realistically burn.
+ * Supplies uncalibrated output/thinking scenario assumptions from keyword cues.
+ * These values are not predictions of measured provider usage.
  */
 export function estimatePromptComplexity(text = '') {
   if (!text || text.trim().length === 0) {
@@ -222,7 +215,7 @@ export function estimatePromptComplexity(text = '') {
       predictedThinking: 2500,
       predictedOutput: 1200,
       cues: cues.slice(0, 3),
-      note: 'Analytical or multi-step logic. Models will spend moderate reasoning tokens.'
+      note: 'Analytical or multi-step logic. The suggested token budget is an uncalibrated scenario assumption.'
     };
   } else {
     return {

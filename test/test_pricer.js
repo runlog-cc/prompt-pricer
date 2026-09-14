@@ -106,7 +106,7 @@ const cleanPrompt = {
 };
 const cleanReport = analyzePromptBloat(cleanPrompt);
 assert.equal(cleanReport.issues.length, 0, 'Clean prompt should have 0 issues');
-assert.equal(cleanReport.status, 'Well Compacted');
+assert.equal(cleanReport.status, 'No heuristic flags');
 
 const bloatedPrompt = {
   systemPrompt: `You must always check everything. You must make sure to format as JSON. You must always ensure tests pass. Make sure to adhere to guidelines. Under no circumstances should you forget this. It is extremely important that you remember.`,
@@ -129,8 +129,9 @@ assert.ok(bloatedReport.issues.length >= 2, `Expected at least 2 bloat issues, g
 const issueIds = bloatedReport.issues.map(i => i.id);
 assert.ok(issueIds.includes('stack-trace-bloat'), 'Failed to detect stack trace bloat');
 assert.ok(issueIds.includes('thinking-runaway-risk'), 'Failed to detect thinking runaway risk');
-assert.ok(bloatedReport.estimatedWastedTokens > 500, `Expected wasted tokens > 500, got ${bloatedReport.estimatedWastedTokens}`);
-console.log(`  ✓ Successfully flagged stack trace bloat, thinking runaway risk, and calculated savings.`);
+assert.equal(bloatedReport.estimatedWastedTokens, null);
+assert.equal(bloatedReport.potentialMonthlySavingsUSD, null);
+console.log(`  ✓ Successfully flagged stack trace bloat, thinking runaway risk, without inventing savings.`);
 
 // 6. Multi-Turn Conversation & Context Reset Advisor
 console.log('\n▶ Test 6: Multi-Turn Conversation & Context Reset Advisor');
