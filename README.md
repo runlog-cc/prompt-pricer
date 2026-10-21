@@ -1,17 +1,21 @@
-# RunLog Prompt Pricer 0.3.0
+# RunLog Prompt Pricer 0.3.1
 
 Estimate prompt cost locally, with price provenance and machine-readable output. No account, API key, model execution, or session telemetry is involved.
+
+## License
+
+Prompt Pricer is free to use and is licensed under the MIT License. You may use, copy, modify, and redistribute it, including commercially, provided you retain the copyright and license notice. The full license is included in this repository and download. Hosted RunLog services have separate terms.
 
 ## Download → install → run
 
 Node.js 20 or newer and npm are required. In a new working folder:
 
 ```sh
-curl -fL -o runlog-prompt-pricer-0.3.0.tgz https://github.com/runlog-cc/prompt-pricer/releases/download/v0.3.0/runlog-prompt-pricer-0.3.0.tgz
-curl -fLO https://github.com/runlog-cc/prompt-pricer/releases/download/v0.3.0/SHA256SUMS
-awk '$2 == "runlog-prompt-pricer-0.3.0.tgz" {print; found=1} END {if (!found) exit 1}' SHA256SUMS > pricer.SHA256SUMS
+curl -fL -o runlog-prompt-pricer-0.3.1.tgz https://github.com/runlog-cc/prompt-pricer/releases/download/v0.3.1/runlog-prompt-pricer-0.3.1.tgz
+curl -fLO https://github.com/runlog-cc/prompt-pricer/releases/download/v0.3.1/SHA256SUMS
+awk '$2 == "runlog-prompt-pricer-0.3.1.tgz" {print; found=1} END {if (!found) exit 1}' SHA256SUMS > pricer.SHA256SUMS
 sha256sum --check pricer.SHA256SUMS
-npm install --global ./runlog-prompt-pricer-0.3.0.tgz
+npm install --global ./runlog-prompt-pricer-0.3.1.tgz
 runlog price --currency USD --models gpt-4o-mini "Summarize a short note."
 ```
 

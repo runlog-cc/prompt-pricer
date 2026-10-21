@@ -23,7 +23,7 @@ test('explicit file/stdin inputs fail closed and positional strings stay literal
 test('every model exposes applied usage and rates that reconstruct both costs',()=>{
  for(const extra of [[],['--thinking-tokens','123'],['--cached']]){
  const r=run(['price','--json','--models','gpt-4o,claude-3-7-sonnet-thinking','--turns','3',...extra,'refactor architecture with algorithm']);assert.equal(r.status,0,r.stderr);
- const d=JSON.parse(r.stdout);assert.equal(d.estimator_version,'0.3.0');assert.match(d.provenance.pricing_snapshot_sha256,/^[a-f0-9]{64}$/);
+ const d=JSON.parse(r.stdout);assert.equal(d.estimator_version,'0.3.1');assert.match(d.provenance.pricing_snapshot_sha256,/^[a-f0-9]{64}$/);
  assert.equal(d.provenance.pricing_snapshot_sha256,createHash('sha256').update(readFileSync(new URL('../pricing-snapshot.js',import.meta.url))).digest('hex'));
  for(const m of d.results){for(const [period,key] of [['last_turn','last_turn_cost'],['cumulative','cumulative_cost']]){const u=m.applied_usage[period],p=m.rates_usd_per_million;const cost=(u.input_tokens*p.input+u.output_tokens*p.output+u.thinking_tokens*p.thinking)/1e6*d.fx.applied_rate;assert.ok(Math.abs(cost-m[key])<1e-12);}
  assert.equal(m.thinking_application,extra.includes('--thinking-tokens')?'explicit_override':m.model==='gpt-4o'?'automatic_ignored':'automatic_applied');
