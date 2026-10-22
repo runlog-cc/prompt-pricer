@@ -1,10 +1,7 @@
 # Prompt Pricer
 
 Free, local prompt token and cost estimates in JavaScript. No account, API key,
-model execution or session telemetry. Part of the [RunLog public toolkit](https://runlog.cc/pricer/),
-built and maintained by **Vasco Lacerda**.
-
-[About the developer](https://runlog.cc/about) · [Discuss a role or project](mailto:hello@runlog.cc?subject=Role%20or%20project%20discussion)
+model execution or session telemetry. Part of the [RunLog public toolkit](https://runlog.cc/pricer/).
 
 [Offline verification workflow and runs](https://github.com/runlog-cc/prompt-pricer/actions/workflows/verify.yml)
 
@@ -97,3 +94,9 @@ though it were a public repository commit.
 The tool is free under the [MIT License](LICENSE), including commercial use with
 the required notice. Accounts, subscriptions and credit purchases are not needed.
 Earlier private RunLog experiments are outside this public toolkit.
+
+## Author
+
+Built and maintained by **Francisco Garrett**.
+
+[About the developer](https://runlog.cc/about) · [Discuss a role or project](mailto:hello@runlog.cc?subject=Role%20or%20project%20discussion)
