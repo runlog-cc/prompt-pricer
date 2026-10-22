@@ -1,10 +1,39 @@
-# RunLog Prompt Pricer 0.3.1
+# Prompt Pricer
 
-Estimate prompt cost locally, with price provenance and machine-readable output. No account, API key, model execution, or session telemetry is involved.
+Free, local prompt token and cost estimates in JavaScript. No account, API key,
+model execution or session telemetry. Part of the [RunLog public toolkit](https://runlog.cc/pricer/),
+built and maintained by **Vasco Lacerda**.
 
-## License
+[About the developer](https://runlog.cc/about) · [Discuss a role or project](mailto:hello@runlog.cc?subject=Role%20or%20project%20discussion)
 
-Prompt Pricer is free to use and is licensed under the MIT License. You may use, copy, modify, and redistribute it, including commercially, provided you retain the copyright and license notice. The full license is included in this repository and download. Hosted RunLog services have separate terms.
+[Offline verification workflow and runs](https://github.com/runlog-cc/prompt-pricer/actions/workflows/verify.yml)
+
+## Try it from source
+
+With Git and Node.js 20+ (no dependencies to install):
+
+```sh
+git clone https://github.com/runlog-cc/prompt-pricer.git
+cd prompt-pricer
+node bin/runlog-pricer.js price --currency USD --models gpt-4o-mini "Summarize a short note."
+npm test
+```
+
+Expected: a labelled estimate, followed by passing local regression tests. No
+prompt is executed. To install the stable CLI instead, use the verified download
+instructions below.
+
+## What to inspect
+
+| Engineering decision | Implementation and evidence |
+| --- | --- |
+| One calculation path for browser and CLI | [Estimator](engine.js), [CLI](bin/runlog-pricer.js), [formula regressions](test/pricing-regressions.test.js) |
+| Reproducible assumptions rather than invented usage | [Price snapshot](pricing-snapshot.js), [CLI JSON/provenance tests](test/cli.test.js) |
+| Explicit unsupported inputs and qualitative warnings | [Analyzer](analyzer.js), [readiness regressions](test/readiness.test.js) |
+
+I use AI in development and review, and take responsibility for checking the
+calculations, interfaces and failure cases. The browser experience is at RunLog;
+this repository contains the estimator and CLI, not the full hosted site.
 
 ## Download → install → run
 
@@ -19,7 +48,7 @@ npm install --global ./runlog-prompt-pricer-0.3.1.tgz
 runlog price --currency USD --models gpt-4o-mini "Summarize a short note."
 ```
 
-On Windows PowerShell use `curl.exe` instead of `curl`. You can also download the file through the release page and open a terminal in its download folder. The `./` install path requires that file to exist in the current folder. Global installation needs a writable npm prefix; no sudo is required with a user-managed Node installation. Release assets include SHA256SUMS.
+These are POSIX shell commands: use a Linux terminal, macOS terminal or Windows WSL. On macOS replace `sha256sum --check pricer.SHA256SUMS` with `shasum -a 256 -c pricer.SHA256SUMS`. For a native PowerShell workflow, download both files, compare the package hash with `Get-FileHash -Algorithm SHA256`, then run the npm install command; the `awk` selection above is not PowerShell syntax. The `./` install path requires that file to exist in the current folder. Global installation needs a writable npm prefix; no sudo is required with a user-managed Node installation. Release assets include SHA256SUMS.
 
 The command prints estimated input tokens, output/thinking assumptions, per-turn and cumulative cost, and the price observation date. Values are estimates, not metered usage.
 
@@ -53,3 +82,18 @@ Each result includes `applied_usage.last_turn` and `applied_usage.cumulative`, e
 Use `--file ./prompt.md` to read a file (missing files fail with ENOENT), or `cat prompt.md | runlog price --stdin` to read standard input. Exactly one input source is required. Quoted positional prompts remain supported and are always literal text, even if a matching file exists.
 
 Analyzer warnings are qualitative review cues. Legacy numeric waste and monthly savings fields are `null`: no before/after benchmark supports a numerical reduction or efficacy claim. The warning score is a heuristic flag weight, not measured waste.
+
+## Documentation and released versions
+
+These default-branch docs describe the existing **0.3.1** runtime. Published
+`v0.3.1` tags, downloads and checksums remain unchanged; this documentation update
+is not a new package release. `RELEASE.json` describes historical export context,
+not the current public branch commit. For a CI source pin, review the public tag
+and resolve it with `git rev-parse 'v0.3.1^{commit}'`; do not use an export hash as
+though it were a public repository commit.
+
+## Free use and license
+
+The tool is free under the [MIT License](LICENSE), including commercial use with
+the required notice. Accounts, subscriptions and credit purchases are not needed.
+Earlier private RunLog experiments are outside this public toolkit.
